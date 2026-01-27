@@ -1,0 +1,22 @@
+{
+  "1079942597688176723": {
+    "trigger_emoji": "🎲",
+    "trigger_message_id": 1465642013495005388,
+    "trigger_channel_id": 1079942598308921427,
+    "mod_channel_id": 1079942598308921427,
+    "outcomes": [
+      {
+        "name": "powers, curse",
+        "weight": 25
+      },
+      {
+        "name": "powers, blessing",
+        "weight": 25
+      },
+      {
+        "name": "no powers",
+        "weight": 50
+      }
+    ]
+  }
+}

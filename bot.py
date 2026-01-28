@@ -148,7 +148,6 @@ async def setmodchannel(interaction: discord.Interaction, channel: discord.TextC
 
 
 @bot.tree.command(name="setemoji", description="Set the emoji used to trigger the roll reaction.")
-@app_commands.describe(emoji="Emoji users react with (e.g. 🎲)")
 async def setemoji(interaction: discord.Interaction, emoji: str):
     if not interaction.guild:
         return await interaction.response.send_message("Use this in a server.", ephemeral=True)

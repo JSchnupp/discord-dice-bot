@@ -8,11 +8,10 @@ print("Token loaded?", bool(os.getenv("DISCORD_TOKEN")))
 
 import json
 import secrets
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import discord
 from discord import app_commands
-from discord.ext import commands
 
 CONFIG_FILE = "roll_config.json"
 
@@ -100,15 +99,16 @@ def weighted_choice(outcomes: List[dict]) -> str:
 
 
 # -----------------------------
-# Bot setup
+# Bot setup (Client + CommandTree)
 # -----------------------------
 intents = discord.Intents.default()
-intents.reactions = True
 intents.guilds = True
-intents.members = False
-intents.messages = True
+intents.messages = True  # needed to fetch messages / remove reactions
+# NOTE: We do NOT enable message_content intent, because we don't read message text.
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
+
 cfg = load_config()
 
 
@@ -122,7 +122,7 @@ def is_mod(interaction: discord.Interaction) -> bool:
 @bot.event
 async def on_ready():
     try:
-        await bot.tree.sync()
+        await tree.sync()
     except Exception as e:
         print("Command sync failed:", e)
 
@@ -132,7 +132,7 @@ async def on_ready():
 # -----------------------------
 # Slash commands
 # -----------------------------
-@bot.tree.command(name="setmodchannel", description="Set the moderator log channel for rolls.")
+@tree.command(name="setmodchannel", description="Set the moderator log channel for rolls.")
 @app_commands.describe(channel="The channel where roll logs should be sent")
 async def setmodchannel(interaction: discord.Interaction, channel: discord.TextChannel):
     if not interaction.guild:
@@ -147,7 +147,8 @@ async def setmodchannel(interaction: discord.Interaction, channel: discord.TextC
     await interaction.response.send_message(f"✅ Mod log channel set to {channel.mention}", ephemeral=True)
 
 
-@bot.tree.command(name="setemoji", description="Set the emoji used to trigger the roll reaction.")
+@tree.command(name="setemoji", description="Set the emoji used to trigger the roll reaction.")
+@app_commands.describe(emoji="Emoji users should react with (example: 🎲)")
 async def setemoji(interaction: discord.Interaction, emoji: str):
     if not interaction.guild:
         return await interaction.response.send_message("Use this in a server.", ephemeral=True)
@@ -161,7 +162,7 @@ async def setemoji(interaction: discord.Interaction, emoji: str):
     await interaction.response.send_message(f"✅ Trigger emoji set to: {emoji}", ephemeral=True)
 
 
-@bot.tree.command(name="setodds", description="Set the weighted outcome percentages (must total 100).")
+@tree.command(name="setodds", description="Set the weighted outcome percentages (must total 100).")
 @app_commands.describe(
     odds="Format: name=weight; name=weight; ... (example: powers, curse=25; powers, blessing=25; no powers=50)"
 )
@@ -195,7 +196,7 @@ async def setodds(interaction: discord.Interaction, odds: str):
     await interaction.response.send_message(f"✅ Odds updated:\n{pretty}", ephemeral=True)
 
 
-@bot.tree.command(name="postroller", description="Post the dice roller message users react to, and auto-add the emoji.")
+@tree.command(name="postroller", description="Post the dice roller message users react to, and auto-add the emoji.")
 @app_commands.describe(channel="Where to post the roller message", message="Text to show above the roller")
 async def postroller(interaction: discord.Interaction, channel: discord.TextChannel, message: str = "React to roll!"):
     if not interaction.guild:
@@ -222,7 +223,7 @@ async def postroller(interaction: discord.Interaction, channel: discord.TextChan
     )
 
 
-@bot.tree.command(name="showodds", description="Show current odds configuration.")
+@tree.command(name="showodds", description="Show current odds configuration.")
 async def showodds(interaction: discord.Interaction):
     if not interaction.guild:
         return await interaction.response.send_message("Use this in a server.", ephemeral=True)
@@ -243,7 +244,7 @@ async def showodds(interaction: discord.Interaction):
     )
 
 
-@bot.tree.command(name="editrolllog", description="(Mods) Edit a roll log message the bot posted in the mod channel.")
+@tree.command(name="editrolllog", description="(Mods) Edit a roll log message the bot posted in the mod channel.")
 @app_commands.describe(message_id="The message ID of the log message", new_text="What the message should say now")
 async def editrolllog(interaction: discord.Interaction, message_id: str, new_text: str):
     if not interaction.guild:
@@ -270,7 +271,7 @@ async def editrolllog(interaction: discord.Interaction, message_id: str, new_tex
     except discord.NotFound:
         return await interaction.response.send_message("❌ That message ID wasn't found in the mod channel.", ephemeral=True)
 
-    if msg.author.id != bot.user.id:
+    if not bot.user or msg.author.id != bot.user.id:
         return await interaction.response.send_message("❌ I can only edit my own log messages.", ephemeral=True)
 
     await msg.edit(content=new_text)
@@ -282,6 +283,8 @@ async def editrolllog(interaction: discord.Interaction, message_id: str, new_tex
 # -----------------------------
 @bot.event
 async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    if not bot.user:
+        return
     if payload.user_id == bot.user.id:
         return
 
@@ -333,6 +336,7 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
             )
             await mod_ch.send(content)
 
+    # Remove user's reaction so they can roll again easily
     try:
         channel = guild.get_channel(payload.channel_id)
         if isinstance(channel, discord.TextChannel):
@@ -354,4 +358,3 @@ if not TOKEN:
     raise RuntimeError("Set DISCORD_TOKEN environment variable.")
 
 bot.run(TOKEN)
-
